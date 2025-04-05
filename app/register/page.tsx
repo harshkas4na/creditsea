@@ -1,9 +1,8 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,11 +18,12 @@ export default function RegisterPage() {
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const { register } = useAuth()
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!name || !email || !password || !confirmPassword) {
+    if (!name || !email || !password) {
       setError("Please fill in all fields")
       return
     }
@@ -37,6 +37,7 @@ export default function RegisterPage() {
       setError("")
       setIsLoading(true)
       await register(name, email, password)
+      router.push("/login")
     } catch (err: any) {
       setError(err.message || "Failed to register")
     } finally {

@@ -3,6 +3,7 @@
 import { createContext, useState, useContext, useEffect, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
+import api from "@/utils/api"
 
 // Define user roles
 export type UserRole = "user" | "admin" | "verifier"
@@ -35,31 +36,6 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
 })
 
-// Mock users for demo purposes
-const MOCK_USERS = [
-  {
-    id: "1",
-    name: "Admin User",
-    email: "admin@example.com",
-    password: "password",
-    role: "admin" as UserRole,
-  },
-  {
-    id: "2",
-    name: "Verifier User",
-    email: "verifier@example.com",
-    password: "password",
-    role: "verifier" as UserRole,
-  },
-  {
-    id: "3",
-    name: "Regular User",
-    email: "user@example.com",
-    password: "password",
-    role: "user" as UserRole,
-  },
-]
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -68,11 +44,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Check if user is already logged in
   useEffect(() => {
-    const storedUser = localStorage.getItem("user")
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
+    const checkAuth = async () => {
+      const token = localStorage.getItem("token")
+      
+      if (token) {
+        try {
+          api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+          const response = await api.get('/api/users/profile')
+          setUser(response.data.user)
+        } catch (error) {
+          localStorage.removeItem("token")
+          delete api.defaults.headers.common['Authorization']
+        }
+      }
+      
+      setIsLoading(false)
     }
-    setIsLoading(false)
+    
+    checkAuth()
   }, [])
 
   // Login function
@@ -80,19 +69,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true)
 
     try {
-      // In a real app, this would be an API call
-      const user = MOCK_USERS.find((u) => u.email === email && u.password === password)
-
-      if (!user) {
-        throw new Error("Invalid credentials")
-      }
-
-      // Remove password before storing
-      const { password: _, ...userWithoutPassword } = user
-
-      // Store user in localStorage
-      localStorage.setItem("user", JSON.stringify(userWithoutPassword))
-      setUser(userWithoutPassword)
+      const response = await api.post('/api/auth/login', { email, password })
+      const { token, user } = response.data
+      
+      // Store token and set default header
+      localStorage.setItem("token", token)
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      
+      setUser(user)
 
       // Redirect based on role
       if (user.role === "admin") {
@@ -107,11 +91,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         title: "Login successful",
         description: `Welcome back, ${user.name}!`,
       })
-    } catch (error) {
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Login failed",
-        description: error instanceof Error ? error.message : "An error occurred",
+        description: error.response?.data?.message || "An error occurred during login",
       })
       throw error
     } finally {
@@ -124,34 +108,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true)
 
     try {
-      // Check if email already exists
-      if (MOCK_USERS.some((u) => u.email === email)) {
-        throw new Error("Email already in use")
-      }
-
-      // In a real app, this would be an API call
-      const newUser = {
-        id: (MOCK_USERS.length + 1).toString(),
-        name,
-        email,
-        role: "user" as UserRole,
-      }
-
-      // Store user in localStorage (for demo purposes)
-      localStorage.setItem("user", JSON.stringify(newUser))
-      setUser(newUser)
+      const response = await api.post('/api/auth/register', { 
+        name, 
+        email, 
+        password,
+        role: "user" // Default role for registration
+      })
 
       toast({
         title: "Registration successful",
-        description: "Your account has been created.",
+        description: "Your account has been created. Please login.",
       })
 
-      router.push("/dashboard")
-    } catch (error) {
+      router.push("/login")
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Registration failed",
-        description: error instanceof Error ? error.message : "An error occurred",
+        description: error.response?.data?.message || "An error occurred during registration",
       })
       throw error
     } finally {
@@ -161,7 +135,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Logout function
   const logout = () => {
-    localStorage.removeItem("user")
+    localStorage.removeItem("token")
+    delete api.defaults.headers.common['Authorization']
     setUser(null)
     router.push("/login")
 

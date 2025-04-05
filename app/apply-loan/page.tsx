@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import ProtectedRoute from "@/components/protected-route"
@@ -12,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
+import api from "@/utils/api"
 
 export default function ApplyLoan() {
   const [fullName, setFullName] = useState("")
@@ -22,6 +21,7 @@ export default function ApplyLoan() {
   const [employerName, setEmployerName] = useState("")
   const [employerAddress, setEmployerAddress] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [agreed, setAgreed] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -37,18 +37,42 @@ export default function ApplyLoan() {
       return
     }
 
+    if (!agreed) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Please agree to the terms and conditions",
+      })
+      return
+    }
+
     setIsSubmitting(true)
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const response = await api.post('/api/loans', {
+        amount: Number(amount),
+        tenure: Number(tenure),
+        reason,
+        employmentStatus,
+        employerName: employerName || undefined,
+        employerAddress: employerAddress || undefined,
+      })
+
       toast({
         title: "Application Submitted",
         description: "Your loan application has been submitted successfully",
       })
 
       router.push("/dashboard")
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.response?.data?.message || "Failed to submit application",
+      })
+    } finally {
       setIsSubmitting(false)
-    }, 1500)
+    }
   }
 
   return (
@@ -124,17 +148,14 @@ export default function ApplyLoan() {
 
             <div className="mb-6 space-y-4">
               <div className="flex items-center space-x-2">
-                <Checkbox id="terms1" />
+                <Checkbox 
+                  id="terms1" 
+                  checked={agreed}
+                  onCheckedChange={(checked) => setAgreed(checked as boolean)}
+                />
                 <Label htmlFor="terms1" className="text-sm">
-                  I have read the legal and other information.
-                </Label>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Checkbox id="terms2" />
-                <Label htmlFor="terms2" className="text-sm">
-                  I understand that by considering the application, CreditSea may be disclosed from time to time to
-                  other lenders, credit bureaus or DPAs, credit reporting agencies.
+                  I have read the legal and other information and agree that by considering the application, CreditSea may 
+                  disclose information to other lenders, credit bureaus, and credit reporting agencies.
                 </Label>
               </div>
             </div>

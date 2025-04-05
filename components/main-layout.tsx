@@ -6,7 +6,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
-import { Home, Users, CreditCard, DollarSign, Settings, LogOut, Bell, MessageSquare, ChevronDown } from "lucide-react"
+import { Home, Users, CreditCard, DollarSign, Settings, LogOut, Bell, MessageSquare, ChevronDown, Menu } from "lucide-react"
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -31,7 +31,7 @@ export default function MainLayout({ children, title = "Dashboard" }: MainLayout
         </div>
         <div className="p-4 flex items-center space-x-3 border-b border-green-800">
           <div className="w-8 h-8 rounded-full bg-green-700 flex items-center justify-center">
-            <span className="text-sm">{user?.name.charAt(0)}</span>
+            <span className="text-sm">{user?.name?.charAt(0)}</span>
           </div>
           <span>{user?.name}</span>
         </div>
@@ -130,7 +130,7 @@ export default function MainLayout({ children, title = "Dashboard" }: MainLayout
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center">
               <button className="md:hidden mr-2" onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
-                <span className="material-icons">menu</span>
+                <Menu className="h-6 w-6" />
               </button>
               <div className="text-xl font-semibold">{title}</div>
             </div>

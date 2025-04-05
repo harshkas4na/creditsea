@@ -1,158 +1,129 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { CreditCard, DollarSign, Users, Building, BarChart } from "lucide-react"
 import ProtectedRoute from "@/components/protected-route"
 import MainLayout from "@/components/main-layout"
 import StatsCard from "@/components/dashboard/stats-card"
-import LoanTable, { type Loan } from "@/components/dashboard/loan-table"
 import ChartCard from "@/components/dashboard/chart-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import api from "@/utils/api"
 
-// Mock data for admin dashboard
-const MOCK_STATS = {
-  activeUsers: 200,
-  borrowers: 100,
-  cashDisbursed: 550000,
-  cashReceived: 1000000,
-  savings: 450000,
-  repaidLoans: 30,
-  otherAccounts: 10,
-  loans: 50,
+interface DashboardStats {
+  activeUsers: number
+  borrowers: number
+  cashDisbursed: number
+  cashReceived: number
+  totalSavings: number
+  repaidLoans: number
+  otherAccounts: number
+  totalLoans: number
 }
 
-const MOCK_LOANS: Loan[] = [
-  {
-    id: "1",
-    user: {
-      id: "101",
-      name: "Tom Cruise",
-    },
-    amount: 50000,
-    date: "June 05, 2021",
-    status: "verified",
-    reason: "Contact Email not Linked",
-  },
-  {
-    id: "2",
-    user: {
-      id: "102",
-      name: "Matt Damon",
-    },
-    amount: 75000,
-    date: "June 03, 2021",
-    status: "verified",
-    reason: "Adding Images to Featured Posts",
-  },
-  {
-    id: "3",
-    user: {
-      id: "103",
-      name: "Robert Downey",
-    },
-    amount: 100000,
-    date: "June 06, 2021",
-    status: "verified",
-    reason: "When will I be charged this month?",
-  },
-  {
-    id: "4",
-    user: {
-      id: "104",
-      name: "Christian Bale",
-    },
-    amount: 125000,
-    date: "June 08, 2021",
-    status: "pending",
-    reason: "Payment not going through",
-  },
-  {
-    id: "5",
-    user: {
-      id: "105",
-      name: "Henry Cavil",
-    },
-    amount: 150000,
-    date: "June 10, 2021",
-    status: "approved",
-    reason: "Unable to add replies",
-  },
-  {
-    id: "6",
-    user: {
-      id: "106",
-      name: "Chris Evans",
-    },
-    amount: 175000,
-    date: "June 12, 2021",
-    status: "approved",
-    reason: "Downtime since last week",
-  },
-  {
-    id: "7",
-    user: {
-      id: "107",
-      name: "Sam Smith",
-    },
-    amount: 200000,
-    date: "June 15, 2021",
-    status: "rejected",
-    reason: "Referral Bonus",
-  },
-]
+interface RecoveryRates {
+  defaultLoans: number
+  openLoans: number
+}
 
-// Chart data
-const LOANS_RELEASED_DATA = [
-  { name: "1", value: 500 },
-  { name: "2", value: 350 },
-  { name: "3", value: 200 },
-  { name: "4", value: 650 },
-  { name: "5", value: 100 },
-  { name: "6", value: 250 },
-  { name: "7", value: 300 },
-  { name: "8", value: 150 },
-  { name: "9", value: 400 },
-  { name: "10", value: 500 },
-  { name: "11", value: 300 },
-  { name: "12", value: 700 },
-]
+interface User {
+  id: string
+  name: string
+}
 
-const OUTSTANDING_LOANS_DATA = [
-  { name: "1", value: 50 },
-  { name: "2", value: 500 },
-  { name: "3", value: 600 },
-  { name: "4", value: 800 },
-  { name: "5", value: 100 },
-  { name: "6", value: 450 },
-  { name: "7", value: 200 },
-  { name: "8", value: 800 },
-  { name: "9", value: 550 },
-  { name: "10", value: 100 },
-  { name: "11", value: 400 },
-  { name: "12", value: 350 },
-]
+interface Loan {
+  _id: string
+  user: User
+  amount: number
+  applicationDate: string
+  status: string
+  reason?: string
+}
 
-const REPAYMENTS_DATA = [
-  { name: "1", value: 1 },
-  { name: "2", value: 5 },
-  { name: "3", value: 6 },
-  { name: "4", value: 9 },
-  { name: "5", value: 1 },
-  { name: "6", value: 4 },
-  { name: "7", value: 2 },
-  { name: "8", value: 9 },
-  { name: "9", value: 5 },
-  { name: "10", value: 1 },
-  { name: "11", value: 4 },
-  { name: "12", value: 3 },
-]
+interface ChartPoint {
+  name: string
+  value: number
+}
 
 export default function AdminDashboard() {
-  const [loans, setLoans] = useState<Loan[]>(MOCK_LOANS)
-  const [stats, setStats] = useState(MOCK_STATS)
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [recoveryRates, setRecoveryRates] = useState<RecoveryRates | null>(null)
+  const [loans, setLoans] = useState<Loan[]>([])
+  const [chartData, setChartData] = useState<{
+    loansReleasedMonthly: ChartPoint[];
+    outstandingLoansMonthly: ChartPoint[];
+    repaymentsCollectedMonthly: ChartPoint[];
+  }>({
+    loansReleasedMonthly: [],
+    outstandingLoansMonthly: [],
+    repaymentsCollectedMonthly: []
+  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
-  const handleStatusChange = (loanId: string, newStatus: Loan["status"]) => {
-    setLoans(loans.map((loan) => (loan.id === loanId ? { ...loan, status: newStatus } : loan)))
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const response = await api.get('/api/admin/dashboard')
+        
+        setStats(response.data.stats)
+        setRecoveryRates(response.data.recoveryRates)
+        setLoans(response.data.recentLoans)
+        
+        // Format chart data for the UI
+        const formatChartData = (chartArray: any[]): ChartPoint[] => {
+          return chartArray.map(item => ({
+            name: item._id.toString(),
+            value: item.count
+          }))
+        }
+        
+        setChartData({
+          loansReleasedMonthly: formatChartData(response.data.charts.loansReleasedMonthly),
+          outstandingLoansMonthly: formatChartData(response.data.charts.outstandingLoansMonthly),
+          repaymentsCollectedMonthly: formatChartData(response.data.charts.repaymentsCollectedMonthly)
+        })
+        
+        setLoading(false)
+      } catch (err: any) {
+        setError(err.response?.data?.message || "Failed to load dashboard data")
+        setLoading(false)
+      }
+    }
+    
+    fetchDashboardData()
+  }, [])
+
+  const handleStatusChange = async (loanId: string, newStatus: string) => {
+    try {
+      // This would be implemented to update loan status
+      console.log(`Updating loan ${loanId} to ${newStatus}`)
+    } catch (error) {
+      console.error("Error updating loan status:", error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <ProtectedRoute allowedRoles={["admin"]}>
+        <MainLayout title="Dashboard">
+          <div className="flex justify-center items-center h-64">
+            <div className="text-xl">Loading dashboard data...</div>
+          </div>
+        </MainLayout>
+      </ProtectedRoute>
+    )
+  }
+
+  if (error) {
+    return (
+      <ProtectedRoute allowedRoles={["admin"]}>
+        <MainLayout title="Dashboard">
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+            {error}
+          </div>
+        </MainLayout>
+      </ProtectedRoute>
+    )
   }
 
   return (
@@ -164,69 +135,121 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <StatsCard
               icon={<Users className="h-6 w-6 text-white" />}
-              value={stats.activeUsers}
+              value={stats?.activeUsers || 0}
               label="Active Users"
               className="bg-white"
             />
 
             <StatsCard
               icon={<Users className="h-6 w-6 text-white" />}
-              value={stats.borrowers}
+              value={stats?.borrowers || 0}
               label="Borrowers"
               className="bg-white"
             />
 
             <StatsCard
               icon={<DollarSign className="h-6 w-6 text-white" />}
-              value={stats.cashDisbursed.toLocaleString()}
+              value={(stats?.cashDisbursed || 0).toLocaleString()}
               label="Cash Disbursed"
               className="bg-white"
             />
 
             <StatsCard
               icon={<DollarSign className="h-6 w-6 text-white" />}
-              value={stats.cashReceived.toLocaleString()}
+              value={(stats?.cashReceived || 0).toLocaleString()}
               label="Cash Received"
               className="bg-white"
             />
 
             <StatsCard
               icon={<DollarSign className="h-6 w-6 text-white" />}
-              value={stats.savings.toLocaleString()}
+              value={(stats?.totalSavings || 0).toLocaleString()}
               label="Savings"
               className="bg-white"
             />
 
             <StatsCard
               icon={<CreditCard className="h-6 w-6 text-white" />}
-              value={stats.repaidLoans}
+              value={stats?.repaidLoans || 0}
               label="Repaid Loans"
               className="bg-white"
             />
 
             <StatsCard
               icon={<Building className="h-6 w-6 text-white" />}
-              value={stats.otherAccounts}
+              value={stats?.otherAccounts || 0}
               label="Other Accounts"
               className="bg-white"
             />
 
             <StatsCard
               icon={<CreditCard className="h-6 w-6 text-white" />}
-              value={stats.loans}
+              value={stats?.totalLoans || 0}
               label="Loans"
               className="bg-white"
             />
           </div>
 
-          <LoanTable loans={loans} title="Recent Loans" onStatusChange={handleStatusChange} />
+          <div className="bg-white p-4 rounded shadow mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-medium">Recent Loans</h3>
+              <div className="flex space-x-2">
+                <button className="text-gray-500 px-2">
+                  <span className="material-icons text-sm">sort</span>
+                </button>
+                <button className="text-gray-500 px-2">
+                  <span className="material-icons text-sm">filter_list</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="text-left text-gray-500 border-b">
+                    <th className="pb-2">User details</th>
+                    <th className="pb-2">Customer name</th>
+                    <th className="pb-2">Date</th>
+                    <th className="pb-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loans.slice(0, 5).map((loan) => (
+                    <tr key={loan._id} className="border-b">
+                      <td className="py-3 flex items-center">
+                        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center mr-2">
+                          <span className="text-sm">{loan.user.name.charAt(0)}</span>
+                        </div>
+                        <div>
+                          <p>{loan.reason || "Loan Application"}</p>
+                          <p className="text-xs text-gray-500">{new Date(loan.applicationDate).toLocaleTimeString()}</p>
+                        </div>
+                      </td>
+                      <td className="py-3">{loan.user.name}</td>
+                      <td className="py-3">{new Date(loan.applicationDate).toLocaleDateString()}</td>
+                      <td className="py-3">
+                        <span className={`px-2 py-1 rounded text-xs ${loan.status === 'verified' ? 'bg-green-100 text-green-800' : loan.status === 'approved' ? 'bg-blue-100 text-blue-800' : loan.status === 'rejected' ? 'bg-red-100 text-red-800' : loan.status === 'disbursed' ? 'bg-purple-100 text-purple-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                          {loan.status.toUpperCase()}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           <div className="grid grid-cols-1 gap-6 mt-6">
-            <ChartCard title="Loans Released Monthly" data={LOANS_RELEASED_DATA} type="area" color="#84cc16" />
+            <ChartCard 
+              title="Loans Released Monthly" 
+              data={chartData.loansReleasedMonthly} 
+              type="area" 
+              color="#84cc16" 
+            />
 
             <ChartCard
               title="Total Outstanding Open Loans - Monthly"
-              data={OUTSTANDING_LOANS_DATA}
+              data={chartData.outstandingLoansMonthly}
               type="bar"
               color="#3b82f6"
             />
@@ -242,7 +265,7 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="flex items-center">
                     <BarChart className="h-10 w-10 mr-4 text-amber-600" />
-                    <span className="text-3xl font-bold text-amber-600">45%</span>
+                    <span className="text-3xl font-bold text-amber-600">{recoveryRates?.defaultLoans || 0}%</span>
                   </div>
                 </CardContent>
               </Card>
@@ -255,7 +278,7 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="flex items-center">
                     <BarChart className="h-10 w-10 mr-4 text-green-600" />
-                    <span className="text-3xl font-bold text-green-600">35%</span>
+                    <span className="text-3xl font-bold text-green-600">{recoveryRates?.openLoans || 0}%</span>
                   </div>
                 </CardContent>
               </Card>
@@ -263,7 +286,7 @@ export default function AdminDashboard() {
 
             <ChartCard
               title="Number of Repayments Collected - Monthly"
-              data={REPAYMENTS_DATA}
+              data={chartData.repaymentsCollectedMonthly}
               type="bar"
               color="#b91c1c"
             />
